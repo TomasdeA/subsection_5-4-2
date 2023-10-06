@@ -25,21 +25,21 @@
 //=====[Declarations (prototypes) of private functions]========================
 
 //=====[Implementations of public functions]===================================
-
+//Inicializacion de variables de estado, de puertos y comunicacion inicial por serie
 void smartHomeSystemInit()
 {
     userInterfaceInit();
     fireAlarmInit();
-    pcSerialComInit();
+    pcSerialComInit(); //Enviar por puerto serie los comandos de cada tecla.
 }
-
+//while infinito
 void smartHomeSystemUpdate()
 {
     userInterfaceUpdate();
     fireAlarmUpdate();    
     pcSerialComUpdate();
     eventLogUpdate();
-    delay(SYSTEM_TIME_INCREMENT_MS);
+    delay(SYSTEM_TIME_INCREMENT_MS); // bloqueo de 10ms que tomamos como valido.
 }
 
 //=====[Implementations of private functions]==================================

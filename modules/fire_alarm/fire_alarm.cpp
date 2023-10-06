@@ -49,8 +49,9 @@ static int fireAlarmStrobeTime();
 
 void fireAlarmInit()
 {
+
     temperatureSensorInit();
-    gasSensorInit();
+    gasSensorInit(); //No define nada
     sirenInit();
     strobeLightInit();    
     
@@ -97,7 +98,7 @@ static void fireAlarmActivationUpdate()
 
     if ( overTemperatureDetectorState ) {
         overTemperatureDetected = ON;
-        sirenStateWrite(ON);
+        sirenStateWrite(ON);// define el estado de la alarma en ON
         strobeLightStateWrite(ON);
     }
 
@@ -108,7 +109,7 @@ static void fireAlarmActivationUpdate()
         sirenStateWrite(ON);
         strobeLightStateWrite(ON);
     }
-    
+    //alarmTestButton es la entrada digital para probar la alarma
     if( alarmTestButton ) {             
         overTemperatureDetected = ON;
         gasDetected = ON;

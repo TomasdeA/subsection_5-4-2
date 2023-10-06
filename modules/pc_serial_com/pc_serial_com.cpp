@@ -13,15 +13,28 @@
 #include "gas_sensor.h"
 #include "event_log.h"
 
+#include <cctype> //to solve  a isdigit() problem
 //=====[Declaration of private defines]========================================
 
 //=====[Declaration of private data types]=====================================
 
 typedef enum{
+    PC_SERIAL_SET_DATE,
     PC_SERIAL_COMMANDS,
     PC_SERIAL_GET_CODE,
     PC_SERIAL_SAVE_NEW_CODE,
 } pcSerialComMode_t;
+
+typedef enum{
+    DATE_AND_TIME_START,
+    DATE_AND_TIME_READ_YEAR,
+    DATE_AND_TIME_READ_MONTH,
+    DATE_AND_TIME_READ_DAY,
+    DATE_AND_TIME_READ_HOUR,
+    DATE_AND_TIME_READ_MINUTE,
+    DATE_AND_TIME_READ_SECOND,
+    DATE_AND_TIME_DONE,
+} dateAndTimeInputState_t;
 
 //=====[Declaration and initialization of public global objects]===============
 
@@ -36,13 +49,22 @@ char codeSequenceFromPcSerialCom[CODE_NUMBER_OF_KEYS];
 //=====[Declaration and initialization of private global variables]============
 
 static pcSerialComMode_t pcSerialComMode = PC_SERIAL_COMMANDS;
+static dateAndTimeInputState_t dateAndTimeInputState = DATE_AND_TIME_DONE;
 static bool codeComplete = false;
 static int numberOfCodeChars = 0;
+static char dateAndTimerInputBuffer[3]; // Almacena los caracteres de entrada para date and time
+char yearBuffer[5]  = "";
+char monthBuffer[3] = "";
+char dayBuffer[3]   = "";
+char hourBuffer[3]  = "";
+char minuteBuffer[3]= "";
+char secondBuffer[3]= "";
 
 //=====[Declarations (prototypes) of private functions]========================
 
 static void pcSerialComStringRead( char* str, int strLength );
 
+static void pcSerialComSetDateAndTime( char receivedChar );
 static void pcSerialComGetCodeUpdate( char receivedChar );
 static void pcSerialComSaveNewCodeUpdate( char receivedChar );
 
@@ -86,6 +108,11 @@ void pcSerialComUpdate()
     char receivedChar = pcSerialComCharRead();
     if( receivedChar != '\0' ) {
         switch ( pcSerialComMode ) {
+            
+            case PC_SERIAL_SET_DATE:
+                pcSerialComSetDateAndTime( receivedChar );
+            break;
+
             case PC_SERIAL_COMMANDS:
                 pcSerialComCommandUpdate( receivedChar );
             break;
@@ -120,11 +147,234 @@ static void pcSerialComStringRead( char* str, int strLength )
 {
     int strIndex;
     for ( strIndex = 0; strIndex < strLength; strIndex++) {
+        
         uartUsb.read( &str[strIndex] , 1 );
-        uartUsb.write( &str[strIndex] ,1 );
+        uartUsb.write( &str[strIndex] ,1 ); //eco del mensaje recibido
     }
     str[strLength]='\0';
 }
+
+
+static void pcSerialComSetDateAndTime( char receivedChar )
+{
+    if (receivedChar != '\0') {
+        // Siempre debes recibir caracteres mientras el estado no sea 'Done'
+        // Procesa el caracter recibido según el estado actual
+        switch (dateAndTimeInputState) {
+            case DATE_AND_TIME_START:
+                pcSerialComStringWrite("Type four digits for the current year (YYYY): ");
+                dateAndTimeInputState = DATE_AND_TIME_READ_YEAR;
+                break;
+            case DATE_AND_TIME_READ_YEAR:
+                // Verifica si el caracter recibido es un dígito válido
+                if (isdigit(receivedChar)) {
+                    // Agrega el caracter al búfer de entrada si hay espacio
+                    if (strlen(dateAndTimerInputBuffer) < 4) {
+                        dateAndTimerInputBuffer[strlen(dateAndTimerInputBuffer)] = receivedChar;
+                        dateAndTimerInputBuffer[strlen(dateAndTimerInputBuffer) + 1] = '\0';
+                    }
+
+                    // Verifica si se han ingresado cuatro dígitos
+                    if (strlen(dateAndTimerInputBuffer) == 4) {
+                        int yearValue = atoi(dateAndTimerInputBuffer);
+                        if (yearValue >= 1900 && yearValue <= 2099) {
+                            // El año se ha ingresado correctamente
+                            // Cambia al siguiente estado
+                            dateAndTimeInputState = DATE_AND_TIME_READ_MONTH;
+                            pcSerialComStringWrite("\r\nType two digits for the current month (01-12): ");
+                            // Limpia el búfer de entrada para el próximo campo
+                            dateAndTimerInputBuffer[0] = '\0';
+                        } else {
+                            // El año está fuera del rango, muestra un mensaje de error
+                            pcSerialComStringWrite("\r\nInvalid year. Please try again (YYYY): ");
+                            // Limpia el búfer de entrada para volver a ingresar el año
+                            dateAndTimerInputBuffer[0] = '\0';
+                        }
+                    }
+                } else {
+                    // El caracter no es un dígito válido, muestra un mensaje de error
+                    pcSerialComStringWrite("\r\nInvalid input. Please try again (YYYY): ");
+                    // Limpia el búfer de entrada para volver a ingresar el año
+                    dateAndTimerInputBuffer[0] = '\0';
+                }
+                break;
+            case DATE_AND_TIME_READ_MONTH:
+                // Verifica si el caracter recibido es un dígito válido
+                if (isdigit(receivedChar)) {
+                    // Agrega el caracter al búfer de entrada si hay espacio
+                    if (strlen(dateAndTimerInputBuffer) < 2) {
+                        dateAndTimerInputBuffer[strlen(dateAndTimerInputBuffer)] = receivedChar;
+                        dateAndTimerInputBuffer[strlen(dateAndTimerInputBuffer) + 1] = '\0';
+                    }
+
+                    // Verifica si se han ingresado dos dígitos y están en el rango correcto
+                    if (strlen(dateAndTimerInputBuffer) == 2) {
+                        int monthValue = atoi(dateAndTimerInputBuffer);
+                        if (monthValue >= 1 && monthValue <= 12) {
+                            // El mes se ha ingresado correctamente
+                            // Cambia al siguiente estado
+                            dateAndTimeInputState = DATE_AND_TIME_READ_DAY;
+                            pcSerialComStringWrite("\r\nType two digits for the current day (01-31): ");
+                            // Limpia el búfer de entrada para el próximo campo
+                            dateAndTimerInputBuffer[0] = '\0';
+                        } else {
+                            // El mes está fuera del rango, muestra un mensaje de error
+                            pcSerialComStringWrite("\r\nInvalid month. Please try again (01-12): ");
+                            // Limpia el búfer de entrada para volver a ingresar el mes
+                            dateAndTimerInputBuffer[0] = '\0';
+                        }
+                    }
+                } else {
+                    // El caracter no es un dígito válido, muestra un mensaje de error
+                    pcSerialComStringWrite("\r\nInvalid input. Please try again (01-12): ");
+                    // Limpia el búfer de entrada para volver a ingresar el mes
+                    dateAndTimerInputBuffer[0] = '\0';
+                }
+                break;
+            case DATE_AND_TIME_READ_DAY:
+                // Verifica si el caracter recibido es un dígito válido
+                if (isdigit(receivedChar)) {
+                    // Agrega el caracter al búfer de entrada si hay espacio
+                    if (strlen(dateAndTimerInputBuffer) < 2) {
+                        dateAndTimerInputBuffer[strlen(dateAndTimerInputBuffer)] = receivedChar;
+                        dateAndTimerInputBuffer[strlen(dateAndTimerInputBuffer) + 1] = '\0';
+                    }
+
+                    // Verifica si se han ingresado dos dígitos y si están en el rango correcto
+                    if (strlen(dateAndTimerInputBuffer) == 2) {
+                        int dayValue = atoi(dateAndTimerInputBuffer);
+                        if (dayValue >= 1 && dayValue <= 31) {
+                            // El día se ha ingresado correctamente
+                            // Cambia al siguiente estado
+                            dateAndTimeInputState = DATE_AND_TIME_READ_HOUR;
+                            pcSerialComStringWrite("\r\nType two digits for the current hour (00-23): ");
+                            // Limpia el búfer de entrada para el próximo campo
+                            dateAndTimerInputBuffer[0] = '\0';
+                        } else {
+                            // El día está fuera del rango, muestra un mensaje de error
+                            pcSerialComStringWrite("\r\nInvalid day. Please try again (01-31): ");
+                            // Limpia el búfer de entrada para volver a ingresar el día
+                            dateAndTimerInputBuffer[0] = '\0';
+                        }
+                    }
+                } else {
+                    // El caracter no es un dígito válido, muestra un mensaje de error
+                    pcSerialComStringWrite("\r\nInvalid input. Please try again (01-31): ");
+                    // Limpia el búfer de entrada para volver a ingresar el día
+                    dateAndTimerInputBuffer[0] = '\0';
+                }
+                break;
+            case DATE_AND_TIME_READ_HOUR:
+                // Verifica si el caracter recibido es un dígito válido
+                if (isdigit(receivedChar)) {
+                    // Agrega el caracter al búfer de entrada si hay espacio
+                    if (strlen(dateAndTimerInputBuffer) < 2) {
+                        dateAndTimerInputBuffer[strlen(dateAndTimerInputBuffer)] = receivedChar;
+                        dateAndTimerInputBuffer[strlen(dateAndTimerInputBuffer) + 1] = '\0';
+                    }
+
+                    // Verifica si se han ingresado dos dígitos y si están en el rango correcto
+                    if (strlen(dateAndTimerInputBuffer) == 2) {
+                        int hourValue = atoi(dateAndTimerInputBuffer);
+                        if (hourValue >= 0 && hourValue <= 23) {
+                            // La hora se ha ingresado correctamente
+                            // Cambia al siguiente estado
+                            dateAndTimeInputState = DATE_AND_TIME_READ_MINUTE;
+                            pcSerialComStringWrite("\r\nType two digits for the current minutes (00-59): ");
+                            // Limpia el búfer de entrada para el próximo campo
+                            dateAndTimerInputBuffer[0] = '\0';
+                        } else {
+                            // La hora está fuera del rango, muestra un mensaje de error
+                            pcSerialComStringWrite("\r\nInvalid hour. Please try again (00-23): ");
+                            // Limpia el búfer de entrada para volver a ingresar la hora
+                            dateAndTimerInputBuffer[0] = '\0';
+                        }
+                    }
+                } else {
+                    // El caracter no es un dígito válido, muestra un mensaje de error
+                    pcSerialComStringWrite("\r\nInvalid input. Please try again (00-23): ");
+                    // Limpia el búfer de entrada para volver a ingresar la hora
+                    dateAndTimerInputBuffer[0] = '\0';
+                }
+                break;
+
+            case DATE_AND_TIME_READ_MINUTE:
+                // Verifica si el caracter recibido es un dígito válido
+                if (isdigit(receivedChar)) {
+                    // Agrega el caracter al búfer de entrada si hay espacio
+                    if (strlen(dateAndTimerInputBuffer) < 2) {
+                        dateAndTimerInputBuffer[strlen(dateAndTimerInputBuffer)] = receivedChar;
+                        dateAndTimerInputBuffer[strlen(dateAndTimerInputBuffer) + 1] = '\0';
+                    }
+
+                    // Verifica si se han ingresado dos dígitos y si están en el rango correcto
+                    if (strlen(dateAndTimerInputBuffer) == 2) {
+                        int minuteValue = atoi(dateAndTimerInputBuffer);
+                        if (minuteValue >= 0 && minuteValue <= 59) {
+                            // Los minutos se han ingresado correctamente
+                            // Cambia al siguiente estado
+                            dateAndTimeInputState = DATE_AND_TIME_READ_SECOND;
+                            pcSerialComStringWrite("\r\nType two digits for the current seconds (00-59): ");
+                            // Limpia el búfer de entrada para el próximo campo
+                            dateAndTimerInputBuffer[0] = '\0';
+                        } else {
+                            // Los minutos están fuera del rango, muestra un mensaje de error
+                            pcSerialComStringWrite("\r\nInvalid minutes. Please try again (00-59): ");
+                            // Limpia el búfer de entrada para volver a ingresar los minutos
+                            dateAndTimerInputBuffer[0] = '\0';
+                        }
+                    }
+                } else {
+                    // El caracter no es un dígito válido, muestra un mensaje de error
+                    pcSerialComStringWrite("\r\nInvalid input. Please try again (00-59): ");
+                    // Limpia el búfer de entrada para volver a ingresar los minutos
+                    dateAndTimerInputBuffer[0] = '\0';
+                }
+                break;
+            case DATE_AND_TIME_READ_SECOND:
+                // Verifica si el caracter recibido es un dígito válido
+                if (isdigit(receivedChar)) {
+                    // Agrega el caracter al búfer de entrada si hay espacio
+                    if (strlen(dateAndTimerInputBuffer) < 2) {
+                        dateAndTimerInputBuffer[strlen(dateAndTimerInputBuffer)] = receivedChar;
+                        dateAndTimerInputBuffer[strlen(dateAndTimerInputBuffer) + 1] = '\0';
+                    }
+
+                    // Verifica si se han ingresado dos dígitos y si están en el rango correcto
+                    if (strlen(dateAndTimerInputBuffer) == 2) {
+                        int secondValue = atoi(dateAndTimerInputBuffer);
+                        if (secondValue >= 0 && secondValue <= 59) {
+                            // Los segundos se han ingresado correctamente
+                            // Cambia al estado final o realiza la acción necesaria
+                            // aquí puedes usar los valores de año, mes, día, hora, minuto y segundo
+                            // para configurar la fecha y hora
+                            pcSerialComStringWrite("\r\nDate and time has been set\r\n");
+                            dateAndTimeWrite(atoi(yearBuffer), atoi(monthBuffer), atoi(dayBuffer),
+                                            atoi(hourBuffer), atoi(minuteBuffer), secondValue);
+                            dateAndTimeInputState = DATE_AND_TIME_DONE; // Cambia al estado final
+                        } else {
+                            // Los segundos están fuera del rango, muestra un mensaje de error
+                            pcSerialComStringWrite("\r\nInvalid seconds. Please try again (00-59): ");
+                            // Limpia el búfer de entrada para volver a ingresar los segundos
+                            dateAndTimerInputBuffer[0] = '\0';
+                        }
+                    }
+                } else {
+                    // El caracter no es un dígito válido, muestra un mensaje de error
+                    pcSerialComStringWrite("\r\nInvalid input. Please try again (00-59): ");
+                    // Limpia el búfer de entrada para volver a ingresar los segundos
+                    dateAndTimerInputBuffer[0] = '\0';
+                }
+                break;
+                
+
+            case DATE_AND_TIME_DONE:
+                // Ya hemos terminado, no hacemos nada más
+                break;
+        }
+    }
+}
+
 
 static void pcSerialComGetCodeUpdate( char receivedChar )
 {
@@ -253,41 +503,11 @@ static void commandShowCurrentTemperatureInFahrenheit()
 
 static void commandSetDateAndTime()
 {
-    char year[5] = "";
-    char month[3] = "";
-    char day[3] = "";
-    char hour[3] = "";
-    char minute[3] = "";
-    char second[3] = "";
-    
-    pcSerialComStringWrite("\r\nType four digits for the current year (YYYY): ");
-    pcSerialComStringRead( year, 4);
-    pcSerialComStringWrite("\r\n");
+    pcSerialComMode = PC_SERIAL_SAVE_NEW_CODE;
+    dateAndTimerInputBuffer[0] = '\0';
 
-    pcSerialComStringWrite("Type two digits for the current month (01-12): ");
-    pcSerialComStringRead( month, 2);
+    dateAndTimeInputState = DATE_AND_TIME_START;
     pcSerialComStringWrite("\r\n");
-
-    pcSerialComStringWrite("Type two digits for the current day (01-31): ");
-    pcSerialComStringRead( day, 2);
-    pcSerialComStringWrite("\r\n");
-
-    pcSerialComStringWrite("Type two digits for the current hour (00-23): ");
-    pcSerialComStringRead( hour, 2);
-    pcSerialComStringWrite("\r\n");
-
-    pcSerialComStringWrite("Type two digits for the current minutes (00-59): ");
-    pcSerialComStringRead( minute, 2);
-    pcSerialComStringWrite("\r\n");
-
-    pcSerialComStringWrite("Type two digits for the current seconds (00-59): ");
-    pcSerialComStringRead( second, 2);
-    pcSerialComStringWrite("\r\n");
-    
-    pcSerialComStringWrite("Date and time has been set\r\n");
-
-    dateAndTimeWrite( atoi(year), atoi(month), atoi(day), 
-        atoi(hour), atoi(minute), atoi(second) );
 }
 
 static void commandShowDateAndTime()

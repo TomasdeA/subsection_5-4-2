@@ -24,10 +24,12 @@ DigitalIn mq2(PE_12);
 
 void gasSensorInit()
 {
+    //Para futuras necesidades de inicializacion
 }
 
 void gasSensorUpdate()
 {
+    //Para futuras necesidades de actualizacion
 }
 
 bool gasSensorRead()

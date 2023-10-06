@@ -14,7 +14,7 @@
 #define DEBOUNCE_KEY_TIME_MS        40
 
 //=====[Declaration of private data types]=====================================
-
+// estados para la lectura del teclado.
 typedef enum {
     MATRIX_KEYPAD_SCANNING,
     MATRIX_KEYPAD_DEBOUNCE,
@@ -59,7 +59,7 @@ char matrixKeypadUpdate()
 
     char keyDetected = '\0';
     char keyReleased = '\0';
-
+//maquina de estados para la lectura del teclado.
     switch( matrixKeypadState ) {
 
     case MATRIX_KEYPAD_SCANNING:
@@ -116,9 +116,9 @@ static char matrixKeypadScan()
         '7', '8', '9', 'C',
         '*', '0', '#', 'D',
     };
-
+//recorro los rows 
     for( row=0; row<MATRIX_KEYPAD_NUMBER_OF_ROWS; row++ ) {
-
+        //clear
         for( i=0; i<MATRIX_KEYPAD_NUMBER_OF_ROWS; i++ ) {
             keypadRowPins[i] = ON;
         }
